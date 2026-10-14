@@ -119,7 +119,26 @@ table.moves th{color:var(--muted);font-weight:500}
 .rows div{display:flex;justify-content:space-between;font-size:15px}
 .rows .tot{border-top:1px solid var(--line);padding-top:6px;margin-top:4px;font-family:var(--display);color:var(--sand)}
 .cardBtns{display:flex;flex-direction:column;gap:8px}
-@media (prefers-reduced-motion:reduce){.btn:active{transform:none}}
+.arenaWrap{position:relative}
+.clash{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;background:rgba(18,11,9,.6);border-radius:12px;opacity:0;transition:opacity .15s;pointer-events:none;cursor:pointer}
+.clash.show{opacity:1;pointer-events:auto}
+.cc{width:37%;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;opacity:0;transform:translateY(10px) scale(.9);transition:transform .24s cubic-bezier(.2,1.4,.4,1),opacity .18s;min-width:0}
+.cc.in{opacity:1;transform:none}
+.cc.atk{border-color:var(--sand)}
+.cc .who{font-family:var(--display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cc .mv{font-weight:600;font-size:15px;line-height:1.1}
+.cc .meta{font-size:12px;color:var(--muted);line-height:1.2}
+.gls{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
+.gls canvas{border:1px solid var(--line);border-radius:6px}
+.gls canvas.main{border-color:var(--stam)}
+.gls canvas.hit{background:var(--sand);border-color:var(--sand)}
+.gls canvas.miss{opacity:.4}
+.oc{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;opacity:0;transform:scale(.5);transition:transform .26s cubic-bezier(.2,1.6,.4,1),opacity .15s}
+.oc.in{opacity:1;transform:none}
+.oc .res{font-family:var(--display);font-weight:600;font-size:16px;line-height:1.05}
+.oc .dmg{font-family:var(--display);font-size:18px;white-space:nowrap}
+.oc .sub{font-size:11px;color:var(--muted);line-height:1.15}
+@media (prefers-reduced-motion:reduce){.btn:active{transform:none}.cc,.oc{transform:none!important;transition:opacity .15s}}
 </style>
 </head>
 <body>
@@ -176,7 +195,10 @@ table.moves th{color:var(--muted);font-weight:500}
     <div class="ttl" id="dTitle">Rank I</div>
     <button class="btn ghost" id="mute" type="button">Sound on</button>
   </div>
-  <canvas class="arena" id="arena" width="384" height="216"></canvas>
+  <div class="arenaWrap">
+    <canvas class="arena" id="arena" width="384" height="216"></canvas>
+    <div class="clash" id="clash"><div class="cc" id="ccL"></div><div class="oc" id="oc"></div><div class="cc" id="ccR"></div></div>
+  </div>
   <div class="hud">
     <div class="rnd" id="rnd">Round I</div>
     <div class="timer" id="timer"><i id="timerFill"></i></div>
@@ -268,6 +290,9 @@ function sfx(k,x){if(muted)return;const a=ac();if(!a)return;const t=a.currentTim
   else if(k==='cheer'){const d=x||1.2;nburst(a,t,'bandpass',1100,.4,.22,d);nburst(a,t+.05,'bandpass',700,.6,.12,d*.9)}
   else if(k==='win'){[523,659,784,1046].forEach((f,i)=>tone(a,t+i*.13,f,'square',.07,.22))}
   else if(k==='lose'){[392,330,262,196].forEach((f,i)=>tone(a,t+i*.18,f,'triangle',.12,.3))}
+  else if(k==='card'){tone(a,t,180,'triangle',.18,.09,120);nburst(a,t,'bandpass',1400,1.5,.06,.05)}
+  else if(k==='reveal'){tone(a,t,392,'square',.05,.1);tone(a,t+.09,523,'square',.05,.14)}
+  else if(k==='cheerlite'){tone(a,t,523,'square',.05,.1);tone(a,t+.08,784,'square',.06,.18)}
   else if(k==='net'){nburst(a,t,'bandpass',900,2,.2,.3,300)}
 }
 function buzz(n){try{navigator.vibrate&&navigator.vibrate(n)}catch(e){}}
@@ -394,7 +419,7 @@ function startFight(i){ac();const fo=FOES[i],pmax=100+(save.owned.galea?20:0);
   show('duel');$('#dTitle').textContent=`Rank ${fo.rank} · ${fo.name}`;
   $('#iKick').textContent=`Rank ${fo.rank} · ${fo.cls}`;$('#iName').textContent=fo.name;$('#iTrait').textContent=fo.trait;
   $('#iRows').innerHTML=`<div><span>His health</span><span>${fo.hp}</span></div><div><span>Your health</span><span>${pmax}</span></div><div><span>Stance honesty</span><span>${fo.tell>=.8?'Readable':fo.tell>=.6?'Mostly honest':'Deceptive'}</span></div><div><span>Learns your habits</span><span>${fo.learn>=.7?'Quickly':fo.learn>=.3?'Somewhat':'Barely'}</span></div>`;
-  $('#introOv').hidden=false;$('#resOv').hidden=true;renderLegend();renderSlots();renderHud();$('#pA').textContent='';$('#pB').textContent='';
+  closeClash();$('#introOv').hidden=false;$('#resOv').hidden=true;renderLegend();renderSlots();renderHud();$('#pA').textContent='';$('#pB').textContent='';
   requestAnimationFrame(sizePad)}
 $('#iGo').onclick=()=>{ac();$('#introOv').hidden=true;cheer(.9);newRound()};
 
@@ -454,15 +479,47 @@ function resolve(){const f=F,p=f.pick,pl=f.pl,en=f.en,ai=f.ai;f.phase='anim';
   st.push({d:.35,s(){newRound()}});
   f.steps=st;f.stepT=0;st[0].s();renderSlots();renderHud();prompt()}
 
+/* ---------- clash cards ---------- */
+function glyph(cv,mv,col,sz){cv.width=Math.round(sz*dpr);cv.height=Math.round(sz*dpr);cv.style.width=cv.style.height=sz+'px';const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+  g.strokeStyle=col;g.fillStyle=col;g.lineWidth=Math.max(3,sz/8);g.lineCap='square';const a=sz*.24,b=sz-a;
+  if(mv==='t'){g.beginPath();g.arc(sz/2,sz/2,sz/7,0,7);g.fill();return}
+  const s={h:[a,sz/2,b,sz/2],v:[sz/2,a,sz/2,b],r:[a,b,b,a],f:[a,a,b,b]}[mv];g.beginPath();g.moveTo(s[0],s[1]);g.lineTo(s[2],s[3]);g.stroke()}
+function side(f){return f===F.pl?'L':'R'}
+function openClash(){$('#clash').classList.add('show');['#ccL','#ccR','#oc'].forEach(s=>{const e=$(s);e.classList.remove('in','atk');e.innerHTML=''})}
+function closeClash(){$('#clash').classList.remove('show');['#ccL','#ccR','#oc'].forEach(s=>$(s).classList.remove('in'))}
+function cardAtk(A,mv,clean){const m=MOVES[mv],el=$('#cc'+side(A)),you=A===F.pl;
+  el.innerHTML=`<span class="who">${you?'You attack':F.foe.name+' attacks'}</span><canvas></canvas><span class="mv">${m.n}${clean?' ★':''}</span><span class="meta">${Math.round(m.dmg*(clean?1.25:1)*A.mult)} damage${clean?' · clean':''}</span>`;
+  glyph(el.querySelector('canvas'),mv,'#e9b65a',34);el.classList.add('atk');requestAnimationFrame(()=>el.classList.add('in'))}
+function cardDef(D,gs,gi){const el=$('#cc'+side(D)),you=D===F.pl;
+  if(!el.classList.contains('in')||!el.innerHTML){
+    const none=!gs.length,why=D===F.en&&F.netNow?'Caught in the net':'Left open';
+    el.innerHTML=`<span class="who">${you?'You guard':F.foe.name+' guards'}</span>`+(none?`<span class="mv" style="padding-block:10px">No guard</span><span class="meta">${why}</span>`:`<div class="gls">${gs.map((_,i)=>`<canvas class="${i===0?'main':''}"></canvas>`).join('')}</div><span class="mv">${gs.map(k=>MOVES[k].n).join(', ')}</span><span class="meta">First is the main guard</span>`);
+    el.querySelectorAll('.gls canvas').forEach((cv,i)=>glyph(cv,gs[i],i===0?'#7cc3e6':'#b9a48a',26));requestAnimationFrame(()=>el.classList.add('in'))}
+  if(gi!==undefined)el.querySelectorAll('.gls canvas').forEach((cv,i)=>{if(i===gi){cv.classList.add('hit');glyph(cv,gs[i],'#2a1a0e',26)}else cv.classList.add('miss')})}
+function cardOutcome(A,D,mv,gi,dmg,clean){const toRight=(gi>=0?A:D)===F.en,rip=gi===0,el=$('#oc');
+  let res,col,sub;
+  if(gi<0){res=clean?'Clean hit':'Hit';col='#f4e7d0';sub=mv==='r'?'Drains 2 stamina':mv==='f'?'Knocks off balance':'Unguarded line'}
+  else if(rip){res='Riposte!';col='#ffd54a';sub='Main guard ×1.5'}
+  else{res='Parried';col='#e9b65a';sub='Counter'}
+  const n='−'+dmg,hurtCol=toRight?'#f4e7d0':'#ef7466';
+  el.innerHTML=`<span class="res" style="color:${col}">${res}</span><span class="dmg" style="color:${hurtCol}">${toRight?n+' »':'« '+n}</span><span class="sub">${sub}</span>`;
+  requestAnimationFrame(()=>el.classList.add('in'))}
+$('#clash').addEventListener('click',()=>{const f=F;if(f&&f.clashOpen&&f.steps.length)f.stepT=f.steps[0].d});
+
 function exch(A,D,mv,gs,clean){const m=MOVES[mv],o=[];
-  o.push({d:.22,s(){A.anim={type:'lunge',pose:mv,t:0,dur:.5,lg:mv==='t'?12:9};sfx('whoosh');pop(A,m.n+(clean?' ★':''),clean?'#ffd54a':'#f4e7d0')}});
-  const gi=gs.indexOf(mv);
-  if(gi>=0){const rip=gi===0;
+  const gi=gs.indexOf(mv),rip=gi===0;
+  const dmg=gi>=0?Math.round(m.ctr*(rip?1.5:1)*D.mult):Math.round(m.dmg*(clean?1.25:1)*A.mult);
+  o.push({d:1.0,s(){F.clashOpen=true;openClash();cardAtk(A,mv,clean);sfx('card')}});
+  o.push({d:1.0,s(){cardDef(D,gs);sfx('card')}});
+  o.push({d:1.4,s(){cardDef(D,gs,gi);cardOutcome(A,D,mv,gi,dmg,clean);sfx(gi<0?'reveal':rip?'cheerlite':'reveal');buzz(15)}});
+  o.push({d:.2,s(){F.clashOpen=false;closeClash()}});
+  o.push({d:.22,s(){A.anim={type:'lunge',pose:mv,t:0,dur:.5,lg:mv==='t'?12:9};sfx('whoosh')}});
+  if(gi>=0){
     o.push({d:rip?.7:.45,s(){D.anim={type:'guard',t:0,dur:.55};sparks();sfx('clang');shake(2);buzz(25);
       if(rip){slow(.5);pop(D,'Riposte!','#ffd54a');cheer(1.1);if(D===F.pl)F.stats.rip++}else pop(D,'Parried','#e9b65a')}});
     o.push({d:.22,s(){D.anim={type:'lunge',pose:'h',t:0,dur:.5,lg:9};sfx('whoosh')}});
-    o.push({d:.6,s(){hurt(A,Math.round(m.ctr*(rip?1.5:1)*D.mult))}});
-  }else o.push({d:.65,s(){hurt(D,Math.round(m.dmg*(clean?1.25:1)*A.mult));if(D.dead)return;
+    o.push({d:.6,s(){hurt(A,dmg)}});
+  }else o.push({d:.65,s(){hurt(D,dmg);if(D.dead)return;
     if(mv==='r'){D.stam=Math.max(0,D.stam-2);pop(D,'-2 stamina','#7cc3e6')}
     if(mv==='f'){D.offBal=1;pop(D,'Off balance','#7cc3e6')}}});
   return o}
@@ -513,7 +570,7 @@ function prompt(){const f=F;if(!f)return;const p=f.pick;let a='',b='';
   if(f.phase==='atk'){a='Draw your attack';b=(f.idx===0&&f.round<=4)?STANCE_TXT[f.en.stance]:`Read ${f.foe.name}'s stance${save.owned.hasta?'. Tap to thrust':''}`}
   else if(f.phase==='g'){const n=p.g.length;a=n===0?'Draw your main guard':n===1?'Draw a second guard':'Draw a third guard';
     b=f.plOff?'Off balance: one guard this round':n===0?'Parry with your main guard to riposte':'Or lock in to save stamina'}
-  else if(f.phase==='anim'){const r=f.reveal;a=`${f.foe.name}: ${r.a?MOVES[r.a].n:'rests'}`;b=r.g.length?'Guarding '+r.g.map(k=>MOVES[k].g).join(' '):'No guard'}
+  else if(f.phase==='anim'){a='The clash';b='Tap the arena to skip ahead'}
   $('#pA').textContent=a;$('#pB').textContent=b;$('#pB').classList.remove('warn');warnT=0}
 
 $('#bRest').onclick=()=>{const f=F;if(!f||f.phase!=='atk')return;f.pick.rest=true;f.phase='g';sfx('scratch');if(spent()+1>f.pl.stam){lockIn();return}renderSlots();renderHud();prompt()};
